@@ -12,7 +12,7 @@ import ru.gr05307.viewmodels.MainViewModel
 
 @Composable
 @Preview
-fun App(viewModel: MainViewModel = MainViewModel()) {
+fun App(viewModel: MainViewModel= MainViewModel()) {
     MaterialTheme {
         Box {
             PaintPanel(
@@ -27,12 +27,9 @@ fun App(viewModel: MainViewModel = MainViewModel()) {
                 viewModel.selectionOffset,
                 viewModel.selectionSize,
                 Modifier.fillMaxSize(),
-                onDragStart = viewModel::onStartSelecting,
-                onDragEnd = viewModel::onStopSelecting,
-                onDrag = viewModel::onSelecting,
-                onPanStart = viewModel::onStartPanning,
-                onPanEnd = viewModel::onStopPanning,
-                onPan = viewModel::onPanning,
+                viewModel::onStartSelecting,
+                viewModel::onStopSelecting,
+                viewModel::onSelecting,
             )
         }
     }
