@@ -7,7 +7,15 @@ data class Plain(
     var yMax: Double,
     var width: Float = 0f,
     var height: Float = 0f,
-){
-    val xDen get() = width / (xMax - xMin)
-    val yDen get() = height / (yMax - yMin)
+) {
+    // Плотность: сколько пикселей на единицу комплексной плоскости (Double)
+    val xDen: Double
+        get() = if (xMax - xMin != 0.0) width.toDouble() / (xMax - xMin) else 1.0
+
+    val yDen: Double
+        get() = if (yMax - yMin != 0.0) height.toDouble() / (yMax - yMin) else 1.0
+
+    val aspectRatio: Double
+        get() = if (yMax - yMin != 0.0) (xMax - xMin) / (yMax - yMin) else 1.0
+
 }
