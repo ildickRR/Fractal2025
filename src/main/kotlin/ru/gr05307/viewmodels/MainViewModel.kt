@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import ru.gr05307.painting.FractalPainter
 import ru.gr05307.painting.convertation.Converter
 import ru.gr05307.painting.convertation.Plain
+import ru.gr05307.ExportFractal.FractalExporter
 
 class MainViewModel{
     var fractalImage: ImageBitmap = ImageBitmap(0, 0)
@@ -66,6 +67,10 @@ class MainViewModel{
         mustRepaint = true
     }
 
+    fun saveFractalToJpg(path: String) {
+        val exporter = FractalExporter(plain)
+        exporter.saveJPG(path)
+    }
     fun onSelecting(offset: Offset){
         selectionSize = Size(selectionSize.width + offset.x, selectionSize.height + offset.y)
     }
