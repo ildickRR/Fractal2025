@@ -27,13 +27,13 @@ import ru.gr05307.painting.ColorFunction
 import ru.gr05307.painting.*
 import ru.gr05307.rollback.UndoManager
 // Добавление от Артёма
-import ru.gr05307.julia.openJuliaWindow
+import ru.gr05307.julia.JuliaWindowManager
 
 class MainViewModel {
     var fractalImage: ImageBitmap = ImageBitmap(0, 0)
     var selectionOffset by mutableStateOf(Offset(0f, 0f))
     var selectionSize by mutableStateOf(Size(0f, 0f))
-    private val plain = Plain(-2.0,1.0,-1.0,1.0)
+    val plain = Plain(-2.0,1.0,-1.0,1.0)
     private val fractalPainter = FractalPainter(plain)
     private var mustRepaint by mutableStateOf(true)
     private val undoManager = UndoManager(maxSize = 100)
@@ -148,11 +148,11 @@ class MainViewModel {
         }
     }
 
-    // Изменения от Артёма
+    // Изменения от Артёма после хорошего коммита с точками
     fun onPointClicked(x: Float, y: Float) {
         val re = Converter.xScr2Crt(x, plain)
         val im = Converter.yScr2Crt(y, plain)
-        openJuliaWindow(Complex(re, im))
+        JuliaWindowManager.openWindow(Complex(re, im)) // ИСПОЛЬЗУЙТЕ JuliaWindowManager
     }
 
     fun onPanning(offset: Offset){

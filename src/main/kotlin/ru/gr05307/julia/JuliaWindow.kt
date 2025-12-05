@@ -6,52 +6,66 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
+import androidx.compose.ui.window.WindowState
+import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import ru.gr05307.math.Complex
-import kotlin.math.log
-import kotlin.math.sqrt
 
-@Composable
-fun JuliaWindow(c: Complex) {
-    var imageState by remember { mutableStateOf<List<List<Color>>?>(null) }
-    val scope = rememberCoroutineScope()
+// Простой менеджер для хранения параметров окон Жюлиа
+object JuliaWindowManager {
+    private val _windows = mutableListOf<Complex>()
+    val windows: List<Complex> get() = _windows
 
-    LaunchedEffect(c) {
-        scope.launch(Dispatchers.Default) {
-            imageState = renderJulia(c, 800, 600)
-        }
+    fun openWindow(c: Complex) {
+        _windows.add(c)
     }
 
-    MaterialTheme {
-        Canvas(Modifier.fillMaxSize()) {
-            val img = imageState ?: return@Canvas
-            val w = size.width.toInt()
-            val h = size.height.toInt()
-
-            for (x in 0 until w) {
-                for (y in 0 until h) {
-                    drawRect(
-                        color = img[x][y],
-                        topLeft = androidx.compose.ui.geometry.Offset(x.toFloat(), y.toFloat()),
-                        size = androidx.compose.ui.geometry.Size(1f, 1f)
-                    )
-                }
-            }
-        }
+    fun closeWindow(c: Complex) {
+        _windows.remove(c)
     }
 }
 
-fun openJuliaWindow(c: Complex) {
-    application {
-        Window(
-            onCloseRequest = ::exitApplication,
-            title = "Julia: c = ${c.re} + ${c.im}i"
-        ) {
-            JuliaWindow(c)
+@Composable
+fun JuliaWindow(
+    c: Complex,
+    onClose: () -> Unit
+) {
+    var imageState by remember { mutableStateOf<List<List<Color>>?>(null) }
+    var windowSize by remember { mutableStateOf(IntSize(800, 600)) }
+    val scope = rememberCoroutineScope()
+    val windowState = rememberWindowState() // Создаем state здесь
+
+    LaunchedEffect(c, windowSize) {
+        scope.launch(Dispatchers.Default) {
+            imageState = renderJulia(c, windowSize.width, windowSize.height)
+        }
+    }
+
+    Window(
+        onCloseRequest = onClose,
+        title = "Множество Жюлиа: c = ${c.re} + ${c.im}i",
+        state = windowState
+    ) {
+        MaterialTheme {
+            Canvas(Modifier.fillMaxSize()) {
+                windowSize = IntSize(size.width.toInt(), size.height.toInt())
+                val img = imageState ?: return@Canvas
+                val w = size.width.toInt()
+                val h = size.height.toInt()
+
+                for (x in 0 until w) {
+                    for (y in 0 until h) {
+                        drawRect(
+                            color = img[x][y],
+                            topLeft = androidx.compose.ui.geometry.Offset(x.toFloat(), y.toFloat()),
+                            size = androidx.compose.ui.geometry.Size(1f, 1f)
+                        )
+                    }
+                }
+            }
         }
     }
 }

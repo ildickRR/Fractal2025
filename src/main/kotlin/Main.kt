@@ -14,8 +14,37 @@ import androidx.compose.ui.window.application
 import ru.gr05307.ui.PaintPanel
 import ru.gr05307.ui.SelectionPanel
 import ru.gr05307.viewmodels.MainViewModel
-// Добавление от Артёма
+import androidx.compose.runtime.*
+// Добавления от Артёма
 import ru.gr05307.julia.JuliaWindow
+import ru.gr05307.math.Complex
+
+class JuliaViewModelWrapper(
+    private val baseViewModel: MainViewModel,
+    private val onJuliaPointSelected: (Complex) -> Unit
+) {
+    // Делегируем все методы базовому ViewModel
+    val fractalImage get() = baseViewModel.fractalImage
+    val selectionOffset get() = baseViewModel.selectionOffset
+    val selectionSize get() = baseViewModel.selectionSize
+
+    fun paint(scope: androidx.compose.ui.graphics.drawscope.DrawScope) = baseViewModel.paint(scope)
+    fun onImageUpdate(image: androidx.compose.ui.graphics.ImageBitmap) = baseViewModel.onImageUpdate(image)
+    fun onStartSelecting(offset: androidx.compose.ui.geometry.Offset) = baseViewModel.onStartSelecting(offset)
+    fun onSelecting(offset: androidx.compose.ui.geometry.Offset) = baseViewModel.onSelecting(offset)
+    fun onStopSelecting() = baseViewModel.onStopSelecting()
+    fun canUndo() = baseViewModel.canUndo()
+    fun performUndo() = baseViewModel.performUndo()
+    fun onPanning(offset: androidx.compose.ui.geometry.Offset) = baseViewModel.onPanning(offset)
+    fun saveFractalToJpg(path: String) = baseViewModel.saveFractalToJpg(path)
+
+    // Переопределяем обработку кликов
+    fun onPointClicked(x: Float, y: Float) {
+        val re = ru.gr05307.painting.convertation.Converter.xScr2Crt(x, baseViewModel.plain)
+        val im = ru.gr05307.painting.convertation.Converter.yScr2Crt(y, baseViewModel.plain)
+        onJuliaPointSelected(Complex(re, im))
+    }
+}
 
 @Composable
 @Preview
