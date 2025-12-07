@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
@@ -28,16 +29,38 @@ import java.util.Date
 import java.util.UUID
 import kotlin.math.pow
 import ru.gr05307.ExportFractal.FractalExporter
+import ru.gr05307.painting.*
+import ru.gr05307.painting.FractalFunction
+import ru.gr05307.painting.ColorFunction
+import ru.gr05307.math.Complex
+import ru.gr05307.painting.*
 import ru.gr05307.rollback.UndoManager
 
 class MainViewModel {
     var fractalImage: ImageBitmap = ImageBitmap(0, 0)
     var selectionOffset by mutableStateOf(Offset(0f, 0f))
     var selectionSize by mutableStateOf(Size(0f, 0f))
-    private val plain = Plain(-2.0, 1.0, -1.0, 1.0)
-    private val fractalPainter = FractalPainter(plain)
+    val plain = Plain(-2.0,1.0,-1.0,1.0)
+    //private val fractalPainter = FractalPainter(plain)
     private var mustRepaint by mutableStateOf(true)
     private val undoManager = UndoManager(maxSize = 100)
+
+    private var currentFractalFunc: FractalFunction = mandelbrotFunc
+    var currentFractalType: String = "mandelbrot"
+        private set
+    var currentColorFunc: ColorFunction = rainbow
+        private set
+    var currentColorType: String = "rainbow"
+        private set
+
+
+    private val fractalPainter = FractalPainter(plain, currentFractalFunc, currentColorFunc)
+
+    var shouldCloseJuliaPanel: ((Boolean) -> Unit)? = null
+
+    var onJuliaPointSelected: ((Complex) -> Unit)? = null
+
+    private var _shouldCloseJuliaPanel by mutableStateOf(false)
 
     // animation variables
     val tourKeyframes = mutableStateListOf<TourKeyframe>()
@@ -58,7 +81,7 @@ class MainViewModel {
         val yMax: Double,
         val timestamp: Long = System.currentTimeMillis()
     ) {
-    override fun toString(): String {
+        override fun toString(): String {
             return "$name: X[$xMin, $xMax], Y[$yMin, $yMax]"
         }
     }
@@ -91,7 +114,7 @@ class MainViewModel {
         }
     }
 
-    /** Рисование фрактала */
+    // Рисование фрактала
     fun paint(scope: DrawScope) = runBlocking {
         updatePlainSize(scope.size.width, scope.size.height)
 
@@ -108,12 +131,12 @@ class MainViewModel {
         mustRepaint = false
     }
 
-    /** Обновление ImageBitmap после рисования */
+    // Обновление ImageBitmap после рисования
     fun onImageUpdate(image: ImageBitmap) {
         fractalImage = image
     }
 
-    /** Начало выделения области */
+    // Начало выделения области
     fun onStartSelecting(offset: Offset) {
         if (!isTourPlaying) {
             selectionOffset = offset
@@ -121,7 +144,7 @@ class MainViewModel {
         }
     }
 
-    /** Завершение выделения и масштабирование */
+    // Завершение выделения и масштабирование
     fun onStopSelecting() {
         if (selectionSize.width == 0f || selectionSize.height == 0f) return
 
@@ -155,6 +178,8 @@ class MainViewModel {
 
             selectionSize = Size(0f, 0f)
             mustRepaint = true
+            _shouldCloseJuliaPanel = true
+            shouldCloseJuliaPanel?.invoke(true)
         }
     }
 
@@ -299,6 +324,8 @@ class MainViewModel {
             plain.yMax = prevState.yMax
             selectionSize = Size(0f, 0f)
             mustRepaint = true
+            _shouldCloseJuliaPanel = true
+            shouldCloseJuliaPanel?.invoke(true)
         }
     }
 
@@ -313,10 +340,72 @@ class MainViewModel {
         plain.yMax += dy
 
         mustRepaint = true
+        _shouldCloseJuliaPanel = true
+        shouldCloseJuliaPanel?.invoke(true)
     }
 
     fun saveFractalToJpg(path: String) {
-        val exporter = FractalExporter(plain)
+        val exporter = FractalExporter(
+            plain,
+            currentFractalFunc,
+            currentColorFunc
+        )
         exporter.saveJPG(path)
     }
+
+    fun resetCloseJuliaFlag() {
+        _shouldCloseJuliaPanel = false
+    }
+
+    // Артем: Обработка клика по точке
+    fun onPointClicked(x: Float, y: Float) {
+        val re = Converter.xScr2Crt(x, plain)
+        val im = Converter.yScr2Crt(y, plain)
+        val complex = Complex(re, im)
+        onJuliaPointSelected?.invoke(complex)
+    }
+
+    // --- методы переключения функций и цвета ---
+    fun setFractalFunction(f: FractalFunction, type: String) {
+        currentFractalFunc = f
+        currentFractalType = type
+        fractalPainter.fractalFunc = f
+        mustRepaint = true
+    }
+
+    fun setColorFunction(c: ColorFunction, name: String) {
+        currentColorType = name
+        // изменил баг из-за которого цвет не менялся
+        currentColorFunc = c
+        fractalPainter.colorFunc = c
+        mustRepaint = true
+    }
+
+    fun switchToRainbow() = setColorFunction(rainbow,"rainbow")
+    fun switchToGrayscale() = setColorFunction(grayscale, "grayscale")
+    //fun switchToFire() = setColorFunction(fireGradient)
+    fun switchToIce() = setColorFunction(iceGradient, "ice")
+    fun switchToNewtonColor() = setColorFunction(newtonColor, "newtonColor")
+    fun switchToMandelbrot() = setFractalFunction(mandelbrotFunc, "mandelbrot")
+    fun switchToJulia() = setFractalFunction(juliaFunc, "julia")
+    fun switchToNewton() = setFractalFunction(newtonFunc, "newton")
+    val currentPlain: Plain
+        get() = plain.copy()
+    fun setPlain(newPlain: Plain) {
+        undoManager.save(plain.copy())   // сохранить в историю
+        plain.xMin = newPlain.xMin
+        plain.xMax = newPlain.xMax
+        plain.yMin = newPlain.yMin
+        plain.yMax = newPlain.yMax
+        plain.width = newPlain.width
+        plain.height = newPlain.height
+        mustRepaint = true
+    }
 }
+
+data class PlainState(
+    val xMin: Double,
+    val xMax: Double,
+    val yMin: Double,
+    val yMax: Double
+)
