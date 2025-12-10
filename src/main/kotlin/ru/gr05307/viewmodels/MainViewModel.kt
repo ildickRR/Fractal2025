@@ -4,20 +4,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -33,8 +36,8 @@ import ru.gr05307.painting.*
 import ru.gr05307.painting.FractalFunction
 import ru.gr05307.painting.ColorFunction
 import ru.gr05307.math.Complex
-import ru.gr05307.painting.*
 import ru.gr05307.rollback.UndoManager
+import java.util.concurrent.Executors
 
 class MainViewModel {
     var showJulia by mutableStateOf(true)
@@ -48,6 +51,8 @@ class MainViewModel {
     //private val fractalPainter = FractalPainter(plain)
     private var mustRepaint by mutableStateOf(true)
     private val undoManager = UndoManager(maxSize = 100)
+    var isTourRendering by mutableStateOf(false)
+    var tourRenderProgress by mutableStateOf(0f)
 
     private var currentFractalFunc: FractalFunction = mandelbrotFunc
     var currentFractalType: String = "mandelbrot"
@@ -235,6 +240,7 @@ class MainViewModel {
 
         // Reorder frames by frame number to maintain order
         reorderFramesByNumber()
+        onTourKeyframesChanged()
     }
 
 
@@ -277,7 +283,7 @@ class MainViewModel {
 
             // After removal, we could optionally renumber frames
             renumberAllFrames()
-
+            onTourKeyframesChanged()
         }
     }
 
@@ -347,60 +353,107 @@ class MainViewModel {
         }
     }
 
+    private var cachedFrames: List<ImageBitmap>? = null
+    private var tourNeedsRender: Boolean = true
+
+    fun onTourKeyframesChanged() {
+        tourNeedsRender = true
+    }
+
     fun startTour() {
         if (tourKeyframes.size < 2) return
 
-        stopTour() // stop any existing tour
-
+        stopTour()
         isTourPlaying = true
-        currentTourFrame = 0
-        tourProgress = 0f
+        showTourControls = true
+        isTourRendering = true
+        tourRenderProgress = 0f
 
-        // calculate the total frames (i.e 3 seconds per keyframe at 60fps)
         val fps = 60
-        val secondPerKeyframe = 3.0
-        totalTourFrames = ((tourKeyframes.size - 1) * secondPerKeyframe * fps).toInt()
+        val seconds = 2.0
+        val framesPerSegment = (fps * seconds).toInt()
+        totalTourFrames = (tourKeyframes.size - 1) * framesPerSegment
 
-        tourJob = coroutineScope.launch {
+        tourJob = coroutineScope.launch(Dispatchers.Default) {
             try {
-                for (frame in 0 until totalTourFrames) {
-                    if (!isTourPlaying) break
+                if (cachedFrames == null || tourNeedsRender) {
+                    val renderJobs = mutableListOf<Deferred<Pair<Int, ImageBitmap>>>()
+                    var frameNumber = 0
 
-                    val time = frame.toDouble() / fps
-                    val keyframeIndex = (time / secondPerKeyframe).toInt()
-                    val segmentProgress = (time % secondPerKeyframe) / secondPerKeyframe
+                    for (i in 0 until tourKeyframes.size - 1) {
+                        val from = tourKeyframes[i]
+                        val to = tourKeyframes[i + 1]
 
-                    if (keyframeIndex < tourKeyframes.size - 1) {
-                        val from = tourKeyframes[keyframeIndex]
-                        val to = tourKeyframes[keyframeIndex + 1]
+                        for (f in 0 until framesPerSegment) {
+                            val tmp = frameNumber
+                            val t = f.toDouble() / (framesPerSegment - 1)
+                            val eased = easeInOutCubic(t)
 
-                        val easedProgress = easeInOutCubic(segmentProgress)
+                            renderJobs += async(Dispatchers.Default) {
+                                val p = Plain(
+                                    xMin = interpolate(from.xMin, to.xMin, eased),
+                                    xMax = interpolate(from.xMax, to.xMax, eased),
+                                    yMin = interpolate(from.yMin, to.yMin, eased),
+                                    yMax = interpolate(from.yMax, to.yMax, eased),
+                                    width = plain.width,
+                                    height = plain.height
+                                )
+                                val painter = FractalPainter(p, currentFractalFunc, currentColorFunc)
+                                val image = plainToImage(p, painter)
+                                tmp to image
+                            }
 
-                        // update plane coordinates directly
-                        interpolateView(from, to, easedProgress)
-
-                        currentTourFrame = frame
-                        tourProgress = frame.toFloat() /totalTourFrames
-                        mustRepaint = true
+                            frameNumber++
+                            if (frameNumber % (totalTourFrames / 50).coerceAtLeast(1) == 0) {
+                                withContext(Dispatchers.Default) {
+                                    tourRenderProgress = frameNumber.toFloat() / totalTourFrames
+                                }
+                            }
+                        }
                     }
-                    delay((1000 / fps).toLong())
+
+                    cachedFrames = renderJobs.awaitAll().sortedBy { it.first }.map { it.second }
+                    tourNeedsRender = false
+                    renderJobs.clear()
                 }
 
-            } catch (e: CancellationException) {
+                withContext(Dispatchers.Default) { isTourRendering = false }
+                cachedFrames?.let { frames ->
+                    for ((idx, frame) in frames.withIndex()) {
+                        if (!isTourPlaying) break
+                        fractalImage = frame
+                        currentTourFrame = idx
+                        tourProgress = idx.toFloat() / totalTourFrames
+                        mustRepaint = false
+                        delay(60)
+                    }
+                }
+
+            } catch (_: CancellationException) {
             } finally {
                 isTourPlaying = false
-
-                if (tourKeyframes.isNotEmpty()) {
-                    val lastFrame = tourKeyframes.last()
-                    plain.xMin = lastFrame.xMin
-                    plain.xMax = lastFrame.xMax
-                    plain.yMin = lastFrame.yMin
-                    plain.yMax = lastFrame.yMax
-                    mustRepaint = true
-                }
-
+                isTourRendering = false
             }
         }
+    }
+
+    private suspend fun plainToImage(plain: Plain, painter: FractalPainter): ImageBitmap {
+        val image = ImageBitmap(plain.width.toInt(), plain.height.toInt())
+        val canvas = Canvas(image)
+        val drawScope = CanvasDrawScope()
+
+        drawScope.draw(
+            density = object : Density {
+                override val density = 1f
+                override val fontScale = 1f
+            },
+            layoutDirection = LayoutDirection.Ltr,
+            canvas = canvas,
+            size = Size(plain.width, plain.height)
+        ) {
+            painter.paint(this)
+        }
+        return image
     }
 
     fun stopTour() {
