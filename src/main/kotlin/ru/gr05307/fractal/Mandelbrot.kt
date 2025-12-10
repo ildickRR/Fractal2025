@@ -1,4 +1,23 @@
-package ru.gr05307.fractals
+package ru.gr05307.fractal
+
+import ru.gr05307.math.Complex
+
+class Mandelbrot(
+    val nMax: Int = 200,
+    val r: Double = 2.0,
+) {
+    fun isInSet(c: Complex): Float{
+        val z = Complex()
+        repeat(nMax) { n ->
+            z *= z
+            z += c
+            if (z.abs2 >= r * r) return n.toFloat() / nMax
+        }
+        return 1f
+    }
+}
+
+/*package ru.gr05307.fractals
 
 import kotlin.math.sqrt
 import kotlin.concurrent.thread
@@ -99,3 +118,4 @@ fun mandelbrotParallel(
     threads.forEach { it.join() } // ждем завершения всех потоков
     return result
 }
+*/

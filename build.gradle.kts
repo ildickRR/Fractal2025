@@ -23,7 +23,7 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation("androidx.lifecycle:lifecycle-viewmodel-desktop:2.9.4")
     implementation("org.json:json:20231013")
-    //implementation("org.jetbrains.compose.ui:ui-graphics")
+    implementation("org.jetbrains.compose.ui:ui-graphics")
 }
 
 compose.desktop {
